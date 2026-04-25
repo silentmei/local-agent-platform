@@ -4,7 +4,7 @@ import json
 import os
 from dotenv import load_dotenv
 from app.tools.registry import TOOL_REGISTRY, get_tools_text
-tools_text=get_tools_text()
+
 load_dotenv()
 
 # 导入env
@@ -25,7 +25,20 @@ def plan_task(state: AgentState) -> dict:
         openai_api_key=KIMI_API_KEY,
         base_url=KIMI_BASE_URL,
     )
-    prompt = f"请根据以下任务描述，制定一个详细的计划：{state['Task']}"
+    prompt = f"""
+你是 Agent 的计划节点。
+
+用户任务：
+{state["Task"]}
+
+请只生成 3-5 步内部执行计划。
+要求：
+1. 不要回答用户问题
+2. 不要写教程
+3. 不要写 Markdown 表格
+4. 每一步只保留一句话
+"""
+
     plan = llm.invoke(prompt)
 
     return {
@@ -38,13 +51,7 @@ def select_tool(state: AgentState) -> dict:
     """
     根据计划，选择合适的工具
     """
-    tools_text = """
-可用工具：
-1. mock_tool：不需要真实工具时使用
-2. list_files：列出目录文件，参数：{"path": "目录路径"}
-3. read_file：读取文件内容，参数：{"path": "文件路径"}
-4. write_file：写入文件，参数：{"path": "文件路径", "content": "写入内容"}
-"""
+    tools_text=get_tools_text()
 
     prompt = f"""
 你是一个工具选择器。
@@ -53,8 +60,9 @@ def select_tool(state: AgentState) -> dict:
 {state["Task"]}
 
 执行计划：
-{state["plan"]}
+{state.get("plan", [])}
 
+可用工具：
 {tools_text}
 
 请判断是否需要调用工具，并选择最合适的工具。
@@ -92,6 +100,28 @@ def select_tool(state: AgentState) -> dict:
         "status": "tool_selected",
     }
 
+def check_approval(state: AgentState) -> dict:
+    """
+    如果工具风险较高，暂停等待用户审批
+    """
+    tool_name = state.get("selected_tool", "mock_tool")
+    tool_info = TOOL_REGISTRY.get(tool_name, {})
+    risk_level = tool_info.get("risk_level", "low")
+
+    if risk_level == "high":
+        return {
+            "approved": False,
+            "approval_required": True,
+            "approval_reason": f"工具 {tool_name} 风险等级为 high，需要用户审批",
+            "status": "pending_approval",
+        }
+
+    return {
+        "approved": True,
+        "approval_required": False,
+        "approval_reason": None,
+        "status": "approved",
+    }
 
 def execute_tool(state: AgentState) -> AgentState:
     """
@@ -118,7 +148,6 @@ def execute_tool(state: AgentState) -> AgentState:
         "tool_output": tool_output,
         "status": "tool_executed" if tool_output.get("success") else "failed",
     }
-
 
 def finalize_task(state: AgentState) -> dict:
     """
@@ -155,8 +184,19 @@ def finalize_task(state: AgentState) -> dict:
     )
 
     final_response = llm.invoke(prompt).content.strip()
-
+    if state.get("status") == "pending_approval":
+        return {
+        "final_response": state.get("approval_reason", "该操作需要用户审批"),
+        "status": "pending_approval",
+    }
     return {
         "final_response": final_response,
         "status": "completed" if tool_output.get("success") else "failed",
     }
+
+#路由函数
+def route_after_approval(state: AgentState) -> str:
+    if state.get("approved"):
+        return "execute_tool"
+
+    return "finalize_task"

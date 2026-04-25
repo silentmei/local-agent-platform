@@ -2,7 +2,7 @@ from typing import Any,Optional
 from typing_extensions import TypedDict
 
 
-class AgentState(TypedDict):
+class AgentState(TypedDict,total=False):
     Task:str
     status:str #状态：待执行、执行中、已完成、失败
     plan:list[str] #计划
@@ -11,3 +11,7 @@ class AgentState(TypedDict):
     tool_output:dict #工具结果
     final_response:str 
     error:str|None
+    #审批相关
+    approved: bool
+    approval_required: bool
+    approval_reason: str | None
