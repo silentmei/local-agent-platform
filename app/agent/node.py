@@ -92,12 +92,16 @@ def select_tool(state: AgentState) -> dict:
 4. 如果用户的问题不需要访问文件、不需要执行真实操作，选择 mock_tool。
 5. 不要选择不存在于可用工具列表中的工具。
 6. 工具参数必须严格匹配该工具的参数说明。
+7.如果用户要执行 shell 命令、运行测试、运行脚本、安装依赖、查看命令输出，选择 run_shell。
+8.如果用户要访问 URL、请求 API、测试 HTTP 接口、发送 GET/POST/PUT/DELETE 请求，选择 http_request。
 
 路径参数规则：
 1. 如果用户明确给出文件名或目录名，必须提取为 path。
 2. 例如 requirements.txt、README.md、app、docs 都应该作为 path。
 3. 如果用户要列出当前目录，path 使用 "."。
 4. 如果无法确定路径，path 使用 "."。
+5.如果用户没有指定 cwd，cwd 使用 "."。
+6.如果用户没有指定 timeout，timeout 使用 30。
 
 示例 1：
 用户任务：读取 requirements.txt
@@ -134,6 +138,46 @@ def select_tool(state: AgentState) -> dict:
   "selected_tool": "mock_tool",
   "tool_input": {{}}
 }}
+
+示例 5：
+用户任务：运行 pytest
+返回：
+{{
+  "need_tool": true,
+  "selected_tool": "run_shell",
+  "tool_input": {{"command": "pytest", "cwd": ".", "timeout": 60}}
+}}
+
+示例 6：
+用户任务：请求 http://127.0.0.1:8000/tasks
+返回：
+{{
+  "need_tool": true,
+  "selected_tool": "http_request",
+  "tool_input": {{
+    "method": "GET",
+    "url": "http://127.0.0.1:8000/tasks",
+    "headers": {{}},
+    "params": {{}},
+    "timeout": 30
+  }}
+}}
+
+示例 7：
+用户任务：向 http://127.0.0.1:8000/tasks 提交任务 hello
+返回：
+{{
+  "need_tool": true,
+  "selected_tool": "http_request",
+  "tool_input": {{
+    "method": "POST",
+    "url": "http://127.0.0.1:8000/tasks",
+    "headers": {{"Content-Type": "application/json"}},
+    "json": {{"task": "hello"}},
+    "timeout": 30
+  }}
+}}
+
 
 请只返回 JSON，不要解释，不要 Markdown，不要代码块。
 JSON 格式如下：
