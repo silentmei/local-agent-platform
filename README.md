@@ -1,6 +1,6 @@
 # Local Agent Platform
 
-一个本地优先的 Agent 执行平台原型，基于 LangGraph、LangChain、FastAPI、MCP 和 SQLite 设计。当前阶段重点实现 Agent 内核：任务规划、工具选择、工具执行、高风险审批中断、恢复执行和步骤日志。
+一个本地优先的 Agent 执行平台原型，基于 LangGraph、LangChain、FastAPI、MCP 和 SQLite 设计。当前阶段已完成后端 MVP：任务提交、Agent 编排、工具调用、高风险审批、恢复执行、任务存储和执行日志查询。
 
 ## 项目定位
 
@@ -38,12 +38,15 @@
 - LangGraph 原生 `interrupt` / `Command(resume=...)` 恢复执行
 - `step_logs` 执行日志累积
 - SQLAlchemy + SQLite 任务和日志存储层
+- FastAPI 任务提交、查询、日志、审批接口
+- CORS 配置，方便后续前端联调
+- 基础错误保护：模型调用失败、工具 JSON 解析失败、未知工具调用
 
 ## 技术栈
 
 - LangGraph：Agent 状态流转和节点编排
 - LangChain：模型调用抽象
-- FastAPI：后续 API 服务层
+- FastAPI：API 服务层
 - MCP：后续标准化工具扩展
 - SQLite：本地任务和日志存储
 - SQLAlchemy：ORM 数据访问层
@@ -52,6 +55,11 @@
 
 ```text
 app/
+  main.py            # FastAPI 应用入口
+  api/
+    routes.py        # 任务接口
+  schemas/
+    tasks.py         # 请求和响应模型
   agent/
     state.py          # AgentState 定义
     node.py           # LangGraph 节点和路由函数
@@ -63,6 +71,10 @@ app/
   storage/
     database.py       # SQLAlchemy ORM 模型和数据库初始化
     task_repository.py # 任务和日志存储函数
+  services/
+    agent_service.py  # 串联 graph 和 storage
+scripts/
+  test_agent_service.py # service 层测试脚本
 data/
   agent.db            # 本地 SQLite 数据库，默认不提交
 ```
@@ -109,9 +121,76 @@ python -c "from app.storage.database import init_db; init_db()"
 python -m app.agent.test_graph
 ```
 
+运行 service 层测试：
+
+```bash
+python -m scripts.test_agent_service
+```
+
+启动 FastAPI 后端：
+
+```bash
+uvicorn app.main:app --reload
+```
+
+打开接口文档：
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+健康检查：
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+## API Endpoints
+
+```text
+POST /tasks
+提交任务，返回 task_id、thread_id 和执行结果。如果触发高风险操作，会返回 pending_approval。
+
+GET /tasks
+查询最近任务列表。
+
+GET /tasks/{task_id}
+查询单个任务详情。
+
+GET /tasks/{task_id}/logs
+查询任务执行日志，用于执行回放。
+
+POST /tasks/{task_id}/approve
+审批高风险任务，使用 LangGraph Command(resume=...) 恢复执行。
+```
+
+示例请求：
+
+```bash
+curl -X POST http://127.0.0.1:8000/tasks/ \
+  -H "Content-Type: application/json" \
+  -d '{"task": "读取 requirements.txt"}'
+```
+
+高风险任务审批示例：
+
+```bash
+curl -X POST http://127.0.0.1:8000/tasks/ \
+  -H "Content-Type: application/json" \
+  -d '{"task": "帮我写入 api_demo.txt，内容是 hello"}'
+```
+
+如果返回 `status=pending_approval`，再调用：
+
+```bash
+curl -X POST http://127.0.0.1:8000/tasks/{task_id}/approve \
+  -H "Content-Type: application/json" \
+  -d '{"approved": true}'
+```
+
 ## 当前测试场景
 
-`app/agent/test_graph.py` 当前包含两个场景：
+`app/agent/test_graph.py` 和 `scripts/test_agent_service.py` 当前包含两个场景：
 
 - 低风险任务：读取 `requirements.txt`
 - 高风险任务：写入 `demo.txt`，触发审批中断后通过 `Command(resume={"approved": True})` 恢复执行
@@ -120,10 +199,9 @@ python -m app.agent.test_graph
 
 近期计划：
 
-- 将 storage 接入 Agent service
-- 实现 `run_task` 和 `approve_task`
-- 将任务状态、审批状态、步骤日志写入 SQLite
-- 增加 FastAPI 任务提交、查询、审批接口
+- 构建前端 MVP：任务输入、任务列表、任务详情、审批按钮和执行日志
+- 增加更实用的本地工具，例如 `run_shell` 和 `http_request`
+- 增强工具权限控制和安全策略
 
 中期计划：
 
