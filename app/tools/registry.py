@@ -63,6 +63,13 @@ TOOL_REGISTRY = {
     },
 }
 
+try:
+    from app.mcp.adapter import load_mcp_tools_to_registry
+
+    TOOL_REGISTRY.update(load_mcp_tools_to_registry())
+except Exception as e:
+    print(f"加载 MCP 工具失败：{e}")
+
 
 def get_tools_text() -> str:
     lines = []

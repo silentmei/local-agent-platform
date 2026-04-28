@@ -153,7 +153,7 @@ def http_request(tool_input:dict)->dict:
     url=tool_input.get("url")
     headers=tool_input.get("headers",{})
     params=tool_input.get("params",{})
-    json_body=tool_input.get("data",{})
+    json_body=tool_input.get("json")
     timeout=tool_input.get("timeout",30)
     
     if not url:

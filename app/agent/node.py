@@ -94,6 +94,7 @@ def select_tool(state: AgentState) -> dict:
 6. 工具参数必须严格匹配该工具的参数说明。
 7.如果用户要执行 shell 命令、运行测试、运行脚本、安装依赖、查看命令输出，选择 run_shell。
 8.如果用户要访问 URL、请求 API、测试 HTTP 接口、发送 GET/POST/PUT/DELETE 请求，选择 http_request。
+9.如果任务适合某个 MCP 工具，并且该工具出现在可用工具列表中，可以选择名称以 mcp. 开头的工具。
 
 路径参数规则：
 1. 如果用户明确给出文件名或目录名，必须提取为 path。
